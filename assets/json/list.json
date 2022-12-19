@@ -1,0 +1,30 @@
+{
+    "piece": [
+        "./assets/piece/black/rook.svg",
+        "./assets/piece/black/king.svg",
+        "./assets/piece/black/queen.svg",
+        "./assets/piece/black/knight.svg",
+        "./assets/piece/black/bishop.svg",
+        "./assets/piece/black/pawn.svg",
+        "./assets/piece/white/rook.svg",
+        "./assets/piece/white/king.svg",
+        "./assets/piece/white/queen.svg",
+        "./assets/piece/white/knight.svg",
+        "./assets/piece/white/bishop.svg",
+        "./assets/piece/white/pawn.svg"
+    ],
+    "index" : [
+        "rook_black",
+        "king_black",
+        "queen_black",
+        "knight_black",
+        "bishop_black",
+        "pawn_black",
+        "rook_white",
+        "king_white",
+        "queen_white",
+        "knight_white",
+        "bishop_white",
+        "pawn_white"
+    ]
+}
