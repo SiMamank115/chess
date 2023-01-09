@@ -5,12 +5,18 @@ let gameStart = true,
     onMoveAnimation = false,
     playing = false,
     turn = "white",
+    promotionTarget,
     focusOn = false;
 const PieceType = ["pawn", "rook", "knight", "bishop", "queen", "king"],
     Images = {},
     Pieces = {
         black: [],
         white: [],
+    },
+    Check = {
+        mate: false,
+        white: false,
+        black: false,
     },
     ActionHeight = 50,
     BLACK = "#252422",
@@ -23,9 +29,11 @@ async function preload() {
     });
 }
 function setup() {
-    createCanvas(600, 650);
+    Check.white.__proto__.piece = [];
+    Check.black.__proto__.piece = [];
+    createCanvas(560, 660);
     window.TILE_WIDTH = width * 0.125;
-    window.TILE_HEIGHT = (height - ActionHeight) * 0.125;
+    window.TILE_HEIGHT = (height - ActionHeight * 2) * 0.125;
     marginX = TILE_WIDTH * 0.3;
     marginY = TILE_HEIGHT * 0.3;
     boardInitialize();
@@ -33,20 +41,23 @@ function setup() {
 }
 function start() {
     playing = true;
+    turn = "white";
+    Pieces.black = [];
+    Pieces.white = [];
     let addBlack = (e) => Pieces.black.push(e);
     let addWhite = (e) => Pieces.white.push(e);
     for (let i = 0; i < 8; i++) {
         i == 4 && (addWhite(new King(i, 7, false)), addBlack(new King(i, 0, true)));
-        // i == 3 && (addWhite(new Queen(i, 7, false)), addBlack(new Queen(i, 0, true)));
+        i == 3 && (addWhite(new Queen(i, 7, false)), addBlack(new Queen(i, 0, true)));
         (i == 0 || i == 7) && (addWhite(new Rook(i, 7, false)), addBlack(new Rook(i, 0, true)));
-        // (i == 1 || i == 6) && (addWhite(new Knight(i, 7, false)), addBlack(new Knight(i, 0, true)));
-        // (i == 2 || i == 5) && (addWhite(new Bishop(i, 7, false)), addBlack(new Bishop(i, 0, true)));
-        // addWhite(new Pawn(i, 6, false));
-        // addBlack(new Pawn(i, 1, true));
+        (i == 1 || i == 6) && (addWhite(new Knight(i, 7, false)), addBlack(new Knight(i, 0, true)));
+        (i == 2 || i == 5) && (addWhite(new Bishop(i, 7, false)), addBlack(new Bishop(i, 0, true)));
+        addWhite(new Pawn(i, 6, false));
+        addBlack(new Pawn(i, 1, true));
     }
-    addBlack(new Bishop(5, 7));
 }
 function draw() {
+    background("#ced4da")
     if (frameCount % 100 == 0) {
         let a = (a, b) => (a.type == "pawn" || b.type == "king" || (a.type == "queen" && b.type == "rook") || (a.type == "rook" && b.type == "bishop") || (a.type == "bishop" && b.type == "knight") ? -1 : 1);
         Pieces.black.sort(a);
@@ -56,21 +67,27 @@ function draw() {
     board.forEach((tile) => tile.draw());
     Pieces.black = Pieces.black.filter((piece) => !piece.died);
     Pieces.white = Pieces.white.filter((piece) => !piece.died);
-    Pieces.black.forEach((piece) => piece.draw());
-    Pieces.white.forEach((piece) => piece.draw());
     if (focusOn) {
+        let border = 2.5;
         push();
-        fill("#0466c8").strokeWeight(0);
         focusOn.getMovement().forEach((e) => {
-            rect(TILE_WIDTH * e.x + marginX * 1.3, TILE_HEIGHT * e.y + marginY * 1.3 + ActionHeight, TILE_WIDTH - marginX * 2.6, TILE_HEIGHT - marginY * 2.6, 1000);
+            if (piecePositionMatcher(e) || e?.castling) {
+                fill("#ffffff00").strokeWeight(0).stroke("#0466c8c9");
+                strokeWeight(border * 22);
+                rect(TILE_WIDTH * e.x + marginX * 1.5, TILE_HEIGHT * e.y + marginY * 1.5 + ActionHeight, TILE_WIDTH - marginX * 3, TILE_HEIGHT - marginY * 3, 1000);
+            } else {
+                fill("#0466c8c9").strokeWeight(0);
+                rect(TILE_WIDTH * e.x + marginX * 1.3, TILE_HEIGHT * e.y + marginY * 1.3 + ActionHeight, TILE_WIDTH - marginX * 2.6, TILE_HEIGHT - marginY * 2.6, 1000);
+            }
         });
-        let border = 3;
         fill("#00000000")
             .strokeWeight(border * 2)
             .stroke("#0466c8")
             .rect(TILE_WIDTH * focusOn.pos.x + border, TILE_HEIGHT * focusOn.pos.y + border + ActionHeight, TILE_WIDTH - border * 2, TILE_HEIGHT - border * 2);
         pop();
     }
+    Pieces.black.forEach((piece) => piece.draw());
+    Pieces.white.forEach((piece) => piece.draw());
 }
 function boardInitialize() {
     let wd = TILE_WIDTH;
@@ -131,6 +148,14 @@ function piecePositionMatcher(vector = new p5.Vector()) {
     });
     return pieceExist;
 }
+function promotion(type = "queen") {
+    let output = type == "queen" ? Queen : type == "rook" ? Rook : type == "bishop" ? Bishop : type == "knight" ? Knight : undefined;
+
+    Swal?.close();
+    let { pos, color } = promotionTarget;
+    promotionTarget.die(true);
+    Pieces[color].push(new output(pos.x, pos.y, color == "black"));
+}
 class Piece {
     constructor(x, y, type = "pawn", black = false) {
         this.pos = createVector(x, y);
@@ -150,19 +175,44 @@ class Piece {
         if (onMoveAnimation && !force) return;
         this.moved = true;
         onMoveAnimation = true;
+        let oncomp = () => (onMoveAnimation = false);
+        // promotion
+        if (this.type == "pawn" && vector.y == (this.color == "black" ? 7 : 0)) {
+            oncomp = () => {
+                onMoveAnimation = false;
+                promotionTarget = this;
+                Swal.fire({
+                    title: "<strong>Promotion</strong>",
+                    html: `
+                        <div class="promotion ${this.color}">
+                            <div onClick="promotion('queen')" class="queen-option"></div>
+                            <div onClick="promotion('rook')" class="rook-option"></div>
+                            <div onClick="promotion('bishop')" class="bishop-option"></div>
+                            <div onClick="promotion('knight')" class="knight-option"></div>
+                        </div>
+                        `,
+                    focusConfirm: false,
+                    customClass: {
+                        confirmButton: "hidden",
+                    },
+                    allowOutsideClick: false,
+                    allowEscapeKey: false,
+                    allowEnterKey: false,
+                });
+            };
+        }
         return gsap.to(this.pos, {
             x: vector.x,
             y: vector.y,
             duration: this.moveDuration,
             ease: "power1.out",
-            onComplete: () => (onMoveAnimation = false),
+            onComplete: oncomp,
         });
     }
-    die() {
-        setTimeout(() => {
-            this.pos = new p5.Vector(-1, -1);
-            this.died = true;
-        }, this.moveDuration * 250);
+    async die(auto = false) {
+        await new Promise((r) => setTimeout(r, auto ? 0 : this.moveDuration * 250));
+        this.pos = new p5.Vector(-1, -1);
+        this.died = true;
     }
     getPosition() {
         return {
@@ -345,8 +395,9 @@ class King extends Piece {
                 if (!posMatch || posMatch.color != this.color) move.push(createVector(e[0], e[1]));
             }
         });
+        // castling
         let rookPos =
-                this.color == "black"
+                "black" == this.color
                     ? [
                           [0, 0],
                           [7, 0],
